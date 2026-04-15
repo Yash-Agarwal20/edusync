@@ -1,0 +1,6 @@
+{
+  "watch": ["routes", "models", "middleware", "config", "server.js"],
+  "ignore": ["scratch/*", "node_modules/*"],
+  "ext": "js,json",
+  "delay": "1500"
+}
