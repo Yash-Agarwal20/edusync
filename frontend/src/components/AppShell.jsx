@@ -322,12 +322,19 @@ function TimetableView({ s, dbData, loadData, notify, currentUser }) {
     lunchStart: '13:15', lunchEnd: '14:00',
     departmentId: 'All', semester: 'All'
   });
-  const [selectedSection, setSelectedSection] = useState('All');
+  const [filters, setFilters] = useState({
+    departmentId: 'All',
+    courseId: 'All',
+    semester: 'All',
+    sectionId: 'All',
+    facultyId: currentUser.role === 'faculty' ? currentUser._id : 'All'
+  });
 
   const timetable = dbData.timetable || [];
   const subjects = dbData.subjects || [];
   const sections = dbData.sections || [];
   const departments = dbData.departments || [];
+  const courses = dbData.courses || [];
 
   const colorMap = {};
   subjects.forEach((sub, i) => { colorMap[sub._id] = COLORS[i % COLORS.length]; });
@@ -336,18 +343,18 @@ function TimetableView({ s, dbData, loadData, notify, currentUser }) {
   
   // Filtering Logic
   const filteredTimetable = timetable.filter(t => {
-    if (currentUser.role === 'admin') {
-      return selectedSection === 'All' || t.sectionId?._id === selectedSection || t.sectionId === selectedSection;
-    }
-    if (currentUser.role === 'faculty') {
-      const isMyClass = (t.facultyId?._id === currentUser._id || t.facultyId === currentUser._id);
-      const matchesSection = (selectedSection === 'All' || t.sectionId?._id === selectedSection || t.sectionId === selectedSection);
-      return isMyClass && matchesSection;
-    }
+    const dMatch = filters.departmentId === 'All' || t.departmentId?._id === filters.departmentId || t.departmentId === filters.departmentId;
+    const cMatch = filters.courseId === 'All' || t.courseId?._id === filters.courseId || t.courseId === filters.courseId;
+    const sMatch = filters.semester === 'All' || t.semester === Number(filters.semester);
+    const secMatch = filters.sectionId === 'All' || t.sectionId?._id === filters.sectionId || t.sectionId === filters.sectionId;
+    const fMatch = filters.facultyId === 'All' || t.facultyId?._id === filters.facultyId || t.facultyId === filters.facultyId;
+
     if (currentUser.role === 'student') {
-      return t.sectionId?._id === currentUser.sectionId?._id || t.sectionId === currentUser.sectionId;
+       const tSecId = String(t.sectionId?._id || t.sectionId || '');
+       const uSecId = String(currentUser.sectionId?._id || currentUser.sectionId || '');
+       return tSecId === uSecId;
     }
-    return false;
+    return dMatch && cMatch && sMatch && secMatch && fMatch;
   });
 
   const dDays = filteredTimetable.length > 0 
@@ -400,26 +407,7 @@ function TimetableView({ s, dbData, loadData, notify, currentUser }) {
   return (
     <div className="fade-in">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
-          <div className="syne" style={{ fontSize: 21, fontWeight: 800, color: s.text }}>📅 Timetable</div>
-          {(currentUser.role === 'admin' || currentUser.role === 'faculty') && (
-            <div style={{ display: 'flex', background: s.card2, padding: 4, borderRadius: 10, border: `1px solid ${s.border}` }}>
-               <button 
-                 onClick={() => setSelectedSection('All')}
-                 style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: selectedSection === 'All' ? '#6366f1' : 'transparent', color: selectedSection === 'All' ? '#fff' : s.textMuted, fontSize: 11, fontWeight: 700 }}>
-                 ALL
-               </button>
-               {sections.map(sec => (
-                 <button 
-                   key={sec._id}
-                   onClick={() => setSelectedSection(sec._id)}
-                   style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: selectedSection === sec._id ? '#6366f1' : 'transparent', color: selectedSection === sec._id ? '#fff' : s.textMuted, fontSize: 11, fontWeight: 700 }}>
-                   {sec.name}
-                 </button>
-               ))}
-            </div>
-          )}
-        </div>
+        <div className="syne" style={{ fontSize: 21, fontWeight: 800, color: s.text }}>📅 Timetable</div>
         <div style={{ display: 'flex', gap: 10 }}>
           {currentUser.role === 'admin' && (
             <>
@@ -431,6 +419,40 @@ function TimetableView({ s, dbData, loadData, notify, currentUser }) {
             <Btn className="print-hide" onClick={() => window.print()} color="#6366f1" outline>🖨 Print Timetable</Btn>
           )}
         </div>
+      </div>
+
+      <div className="print-hide" style={{ background: s.card, border: `1px solid ${s.border}`, borderRadius: 14, padding: '14px 20px', marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: s.textMuted }}>BROWSE:</span>
+          <select value={filters.departmentId} onChange={e => setFilters(p => ({ ...p, departmentId: e.target.value, courseId: 'All', sectionId: 'All' }))} 
+            style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${s.border}`, background: s.card2, color: s.text, fontSize: 13, minWidth: 140 }}>
+            <option value="All">All Departments</option>
+            {departments.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
+          </select>
+          <select value={filters.courseId} onChange={e => setFilters(p => ({ ...p, courseId: e.target.value, sectionId: 'All' }))} 
+            style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${s.border}`, background: s.card2, color: s.text, fontSize: 13, minWidth: 140 }}>
+            <option value="All">All Courses</option>
+            {courses.filter(c => filters.departmentId === 'All' || c.departmentId?._id === filters.departmentId || c.departmentId === filters.departmentId).map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+          </select>
+          <select value={filters.semester} onChange={e => setFilters(p => ({ ...p, semester: e.target.value, sectionId: 'All' }))} 
+            style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${s.border}`, background: s.card2, color: s.text, fontSize: 13, minWidth: 120 }}>
+            <option value="All">All Semesters</option>
+            {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={s}>Sem {s}</option>)}
+          </select>
+          <select value={filters.sectionId} onChange={e => setFilters(p => ({ ...p, sectionId: e.target.value }))} 
+            style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${s.border}`, background: s.card2, color: s.text, fontSize: 13, minWidth: 120 }}>
+            <option value="All">All Sections</option>
+            {sections.filter(sec => (filters.courseId === 'All' || sec.courseId?._id === filters.courseId || sec.courseId === filters.courseId) && (filters.semester === 'All' || sec.semester === Number(filters.semester))).map(sec => <option key={sec._id} value={sec._id}>{sec.name}</option>)}
+          </select>
+          {currentUser.role === 'admin' && (
+            <select value={filters.facultyId} onChange={e => setFilters(p => ({ ...p, facultyId: e.target.value }))} 
+              style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${s.border}`, background: s.card2, color: s.text, fontSize: 13, minWidth: 140 }}>
+              <option value="All">All Faculty</option>
+              {(dbData.users || []).filter(u => u.role === 'faculty').map(f => <option key={f._id} value={f._id}>{f.name}</option>)}
+            </select>
+          )}
+        </div>
+        <Btn small outline onClick={() => setFilters({ departmentId: 'All', courseId: 'All', semester: 'All', sectionId: 'All', facultyId: currentUser.role === 'faculty' ? currentUser._id : 'All' })} color={s.textMuted}>RESET</Btn>
       </div>
 
       {showConfig && currentUser.role === 'admin' && (
@@ -481,38 +503,53 @@ function TimetableView({ s, dbData, loadData, notify, currentUser }) {
           {currentUser.role === 'admin' && !showConfig && <Btn onClick={() => setShowConfig(true)} color="#6366f1">⚡ Configure & Generate</Btn>}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
+        <div style={{ overflowX: 'auto', borderRadius: 14, border: `1px solid ${s.border}`, background: s.card }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
             <thead>
               <tr>
-                <th style={{ padding: '10px 14px', background: s.card2, color: s.textMuted, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', border: `1px solid ${s.border}`, width: 80 }}>Time</th>
+                <th style={{ padding: '12px 16px', background: s.card2, color: s.textMuted, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800, borderBottom: `2px solid ${s.border}`, borderRight: `1px solid ${s.border}`, width: 100, position: 'sticky', left: 0, zIndex: 10 }}>TIME</th>
                 {dDays.map(d => (
-                  <th key={d} style={{ padding: '10px 14px', background: s.card2, color: s.text, fontSize: 12, fontWeight: 700, border: `1px solid ${s.border}`, textAlign: 'center' }}>{d}</th>
+                  <th key={d} style={{ padding: '12px 16px', background: s.card2, color: s.text, fontSize: 13, fontWeight: 800, borderBottom: `2px solid ${s.border}`, borderRight: `1px solid ${s.border}`, textAlign: 'center' }}>{d}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {dTimes.map(time => {
-                return (
+              {dTimes.map(time => (
                 <tr key={time}>
-                  <td style={{ padding: '8px 14px', background: s.card2, color: s.textMuted, fontSize: 11, fontWeight: 700, border: `1px solid ${s.border}`, whiteSpace: 'nowrap', textAlign: 'center' }}>{time}</td>
+                  <td style={{ padding: '16px', background: s.card2, color: s.text, fontSize: 11, fontWeight: 800, borderBottom: `1px solid ${s.border}`, borderRight: `1px solid ${s.border}`, whiteSpace: 'nowrap', textAlign: 'center', position: 'sticky', left: 0, zIndex: 5 }}>{time}</td>
                   {dDays.map(day => {
                     const slots = getSlot(day, time);
                     return (
-                      <td key={day} style={{ padding: 6, border: `1px solid ${s.border}`, background: s.card, verticalAlign: 'top', minWidth: 130 }}>
-                        {slots.map(slot => {
+                      <td key={day} style={{ padding: 8, borderBottom: `1px solid ${s.border}`, borderRight: `1px solid ${s.border}`, background: s.card, verticalAlign: 'top', minWidth: 160 }}>
+                        {slots.length === 0 ? (
+                          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.25, padding: '15px 0' }}>
+                            <div style={{ fontSize: 10, fontWeight: 800, color: s.textMuted, letterSpacing: '0.15em' }}>LIBRARY</div>
+                          </div>
+                        ) : slots.map(slot => {
                           const sub = slot.subjectId;
                           const room = slot.roomId;
                           const fac = slot.facultyId;
                           const sec = slot.sectionId;
                           const color = colorMap[sub?._id || sub] || '#6366f1';
                           return (
-                            <div key={slot._id} style={{ background: `${color}15`, border: `1.5px solid ${color}40`, borderRadius: 8, padding: '6px 9px', marginBottom: 4, position: 'relative' }}>
-                              <div style={{ fontSize: 11.5, fontWeight: 700, color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub?.name || sub}</div>
-                              <div style={{ fontSize: 10, color: s.textMuted }}>{fac?.name?.split(' ')[0] || ''} · {room?.name || ''}</div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
-                                <div style={{ fontSize: 8.5, color: s.textMuted }}>{sec?.name || 'Section'}</div>
-                                {currentUser.role === 'admin' && <div style={{ fontSize: 8.5, background: color, color: '#fff', padding: '0px 4px', borderRadius: 3, fontWeight: 700 }}>CAP: {room?.capacity}</div>}
+                            <div key={slot._id} style={{ 
+                              background: `linear-gradient(135deg, ${color}10, ${color}05)`, 
+                              borderLeft: `4px solid ${color}`,
+                              borderRadius: '4px 8px 8px 4px',
+                              padding: '10px 12px', 
+                              marginBottom: 8,
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                              transition: 'transform 0.2s',
+                              cursor: 'pointer'
+                            }} className="slot-card">
+                              <div style={{ fontSize: 12, fontWeight: 800, color: s.text, marginBottom: 4, lineHeight: 1.2 }}>{sub?.name || sub}</div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: s.textMuted }}>👨‍🏫 {fac?.name || 'Faculty'}</div>
+                                <div style={{ fontSize: 10, fontWeight: 600, color: s.textMuted }}>🏫 {room?.name || 'Room'}</div>
+                              </div>
+                              <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Badge color={color}>{sec?.name || 'Section'}</Badge>
+                                <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.6 }}>{sub?.type === 'lab' ? '🔬 LAB' : '📖 LEC'}</div>
                               </div>
                             </div>
                           );
@@ -521,8 +558,7 @@ function TimetableView({ s, dbData, loadData, notify, currentUser }) {
                     );
                   })}
                 </tr>
-                );
-              })}
+              ))}
             </tbody>
           </table>
         </div>
@@ -1583,4 +1619,22 @@ export default function AppShell() {
         }} />
       )}
 
-      {sidebarOpen && <div clas
+      {sidebarOpen && <div className="mobile-overlay" style={{ display: 'none' }} onClick={() => setSidebarOpen(false)} />}
+      <Sidebar s={s} currentUser={currentUser} activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} mobileOpen={sidebarOpen} setMobileOpen={setSidebarOpen} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div className="print-hide" style={{ display: 'flex', alignItems: 'center' }}>
+          <button className="mobile-hamburger" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ background: 'none', border: 'none', color: s.text, fontSize: 22, padding: '12px 14px', cursor: 'pointer' }}>☰</button>
+          <div style={{ flex: 1 }}><TopBar s={s} currentUser={currentUser} darkMode={darkMode} setDarkMode={setDarkMode} /></div>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: 24 }} className="fade-in">
+          {notification && (
+            <div style={{ position: 'fixed', top: 80, right: 24, zIndex: 9999, background: notification.type === 'success' ? s.success : s.danger, color: '#fff', padding: '12px 20px', borderRadius: 10, fontSize: 14, fontWeight: 600, boxShadow: '0 8px 32px rgba(0,0,0,0.4)', animation: 'fadeIn 0.3s ease', maxWidth: 360 }}>
+              {notification.msg}
+            </div>
+          )}
+          {renderContent()}
+        </div>
+      </div>
+    </div>
+  );
+}

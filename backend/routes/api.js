@@ -242,17 +242,58 @@ router.post('/sections', protect, adminOnly, async (req, res) => {
 });
 
 // ── COURSES ───────────────────────────────────────────────────────────────────
+async function syncSections(courseId) {
+  const { Course, Section } = require('../models');
+  const course = await Course.findById(courseId);
+  if (!course) return;
+
+  const semesters = (course.duration || 4) * 2;
+  const names = course.sectionNames || [];
+
+  for (let sem = 1; sem <= semesters; sem++) {
+    const existing = await Section.find({ courseId: course._id, semester: sem });
+    
+    // Ensure each desired section exists
+    for (const name of names) {
+      const fullName = `${course.code}-${name}`;
+      const found = existing.find(s => s.name === fullName);
+      if (!found) {
+        await Section.create({ 
+          name: fullName, 
+          courseId: course._id, 
+          semester: sem, 
+          departmentId: course.departmentId 
+        });
+      }
+    }
+
+    // Remove sections no longer in the list
+    for (const sec of existing) {
+      const shortName = sec.name.split('-').pop();
+      if (!names.includes(shortName)) {
+        await Section.findByIdAndDelete(sec._id);
+      }
+    }
+  }
+}
+
 router.get('/courses', protect, async (req, res) => {
   res.json(await Course.find().populate('departmentId', 'name'));
 });
 router.post('/courses', protect, adminOnly, async (req, res) => {
-  try { res.status(201).json(await Course.create(req.body)); }
+  try { 
+    const course = await Course.create(req.body);
+    await syncSections(course._id);
+    res.status(201).json(course); 
+  }
   catch (err) { res.status(400).json({ message: err.message }); }
 });
 router.put('/courses/:id', protect, adminOnly, async (req, res) => {
   const updates = { ...req.body };
   if (updates.departmentId === '') delete updates.departmentId;
-  res.json(await Course.findByIdAndUpdate(req.params.id, updates, { new: true }));
+  const course = await Course.findByIdAndUpdate(req.params.id, updates, { new: true });
+  if (course) await syncSections(course._id);
+  res.json(course);
 });
 router.delete('/courses/:id', protect, adminOnly, async (req, res) => {
   await Course.findByIdAndDelete(req.params.id);

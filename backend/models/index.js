@@ -12,6 +12,7 @@ const courseSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true },
   departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department' },
   duration: { type: Number, default: 4 },
+  sectionNames: [{ type: String }],
 }, { timestamps: true });
 
 // ─── SECTION ──────────────────────────────────────────────────────────────────
